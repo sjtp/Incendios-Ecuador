@@ -1,0 +1,607 @@
+############    SCRIPT REGRESIÃN LOGÃSTICA   ###############
+# NOMBRE: Carmen Elena LÃ³pez Fabara                        #
+#        Miguel Flores                                     #
+#        Isabel                                            #
+#        Abigail Navarrete                                 #
+# ÃLTIMA MODIFICACIÃN: 20 de agosto de 2019                # 
+
+####### 1. INSTALACIÃN DE PAQUETES Y LIBRERÃAS   ###########
+if(!require(recipes)){install.packages("recipes",dependencies = TRUE)}
+if(!require(dplyr)){install.packages("dplyr",dependencies = TRUE)}
+if(!require(caret)){install.packages("caret",dependencies = TRUE)}
+if(!require(car)){install.packages("car",dependencies = TRUE)}
+if(!require(PerformanceAnalytics)){install.packages("PerformanceAnalytics",dependencies = TRUE)}
+if(!require(ggplot2)){install.packages("ggplot2",dependencies = TRUE)}
+if(!require(lattice)){install.packages("lattice",dependencies = TRUE)}
+if(!require(ggpubr)){install.packages("ggpubr",dependencies = TRUE)}
+if(!require(lubridate)){install.packages("lubridate",dependencies = TRUE)}
+if(!require(tidyr)){install.packages("tidyr",dependencies = TRUE)}
+if(!require(corrplot)){install.packages("corrplot",dependencies = TRUE)}
+if(!require(purrr)){install.packages("purrr",dependencies = TRUE)}
+if(!require(randomForest)){install.packages("randomForest",dependencies = TRUE)}
+if(!require(tibble)){install.packages("tibble",dependencies = TRUE)}
+if(!require(data.table)){install.packages("data.table",dependencies = TRUE)}
+if(!require(ranger)){install.packages("ranger",dependencies = TRUE)}
+if(!require(pROC)){install.packages("pROC",dependencies = TRUE)}
+if(!require(sm)){install.packages("sm",dependencies = TRUE)}
+if(!require(aod)){install.packages("aod",dependencies = TRUE)}
+if(!require(survey)){install.packages("survey",dependencies = TRUE)}
+if(!require(MASS)){install.packages("MASS",dependencies = TRUE)}
+if(!require(RColorBrewer)){install.packages("RColorBrewer",dependencies = TRUE)}
+if(!require(ggcorrplot)){install.packages("ggcorrplot",dependencies = TRUE)}
+library(lubridate)
+library(recipes)
+library(dplyr)
+library(ggplot2)
+library(lattice)
+library(caret)
+library(corrplot)
+library(car)
+library(PerformanceAnalytics)
+library(ggpubr)
+library(tidyr)
+library(purrr)
+library(randomForest)
+library(tibble)
+library(data.table)
+library(ranger)
+library(pROC)
+library(sm)
+library(aod)
+library(survey)
+library(MASS)
+library(RColorBrewer)
+library(ggcorrplot)
+####### 2. LECTURA DE LA TABLA DE ENTRADA      #############
+datos <- read.table("./NORTE/Tabla_final4.csv",header = T,sep=";",
+                    dec = ".")
+view(datos)
+str(datos)
+names(datos)
+datos <- datos %>% dplyr::select(-!!c(1:3,5,6))
+head(datos)
+levels(datos$CUS)
+#Cambiar el formato de los datos y reorganizar
+datos <- datos %>%
+  mutate(
+    Class = factor(Class,levels = c(0,1)),
+    CUS = factor(CUS,levels = c("VEGETACION ARBUSTIVA Y HERBACEA","BOSQUE","TIERRA AGROPECUARIA"))
+  )
+levels(datos$CUS)
+levels(datos$Class)
+####### 3. ESTUDIO DE IMPORTANCIA DE LAS VARIABLES #########
+#### 3.1 Test de hipÃ³tesis de variables cuantitativas   ####
+#3.1.1 Ver la proporciÃ³n de incendios y  no incendios 
+prop.table(table(datos$Class)) %>% round(digits = 2)
+#3.1.2 Plotear la distribuciÃ³n de las variables cuantitativas
+#Centros poblados 
+p1 <- ggplot(data = datos, aes(x = urban_m, fill = Class)) +
+  geom_density(alpha = 0.5) +
+  scale_fill_manual(values = c("gray50", "orangered2")) +
+  geom_rug(aes(color = Class), alpha = 0.5) +
+  scale_color_manual(values = c("gray50", "orangered2")) +
+  theme_bw()
+p2 <- ggplot(data = datos, aes(x = Class, y = urban_m, color = Class)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(alpha = 0.3, width = 0.15) +
+  scale_color_manual(values = c("gray50", "orangered2")) +
+  theme_bw()
+final_plot <- ggarrange(p1, p2, legend = "top")
+final_plot <- annotate_figure(final_plot, top = text_grob("Dist urban", size = 15))
+final_plot
+#Vias
+p1 <- ggplot(data = datos, aes(x = road_m, fill = Class)) +
+  geom_density(alpha = 0.5) +
+  scale_fill_manual(values = c("gray50", "orangered2")) +
+  geom_rug(aes(color = Class), alpha = 0.5) +
+  scale_color_manual(values = c("gray50", "orangered2")) +
+  theme_bw()
+p2 <- ggplot(data = datos, aes(x = Class, y = road_m, color = Class)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(alpha = 0.3, width = 0.15) +
+  scale_color_manual(values = c("gray50", "orangered2")) +
+  theme_bw()
+final_plot <- ggarrange(p1, p2, legend = "top")
+final_plot <- annotate_figure(final_plot, top = text_grob("Dist road", size = 15))
+final_plot
+#Cuerpos de agua
+p1 <- ggplot(data = datos, aes(x = river_m, fill = Class)) +
+  geom_density(alpha = 0.5) +
+  scale_fill_manual(values = c("gray50", "orangered2")) +
+  geom_rug(aes(color = Class), alpha = 0.5) +
+  scale_color_manual(values = c("gray50", "orangered2")) +
+  theme_bw()
+p2 <- ggplot(data = datos, aes(x = Class, y = river_m, color = Class)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(alpha = 0.3, width = 0.15) +
+  scale_color_manual(values = c("gray50", "orangered2")) +
+  theme_bw()
+final_plot <- ggarrange(p1, p2, legend = "top")
+final_plot <- annotate_figure(final_plot, top = text_grob("Dist water bodies", size = 15))
+final_plot
+#Pendiente
+p1 <- ggplot(data = datos, aes(x = slope_perc, fill = Class)) +
+  geom_density(alpha = 0.5) +
+  scale_fill_manual(values = c("gray50", "orangered2")) +
+  geom_rug(aes(color = Class), alpha = 0.5) +
+  scale_color_manual(values = c("gray50", "orangered2")) +
+  theme_bw()
+p2 <- ggplot(data = datos, aes(x = Class, y = slope_perc, color = Class)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(alpha = 0.3, width = 0.15) +
+  scale_color_manual(values = c("gray50", "orangered2")) +
+  theme_bw()
+final_plot <- ggarrange(p1, p2, legend = "top")
+final_plot <- annotate_figure(final_plot, top = text_grob("Slope", size = 15))
+final_plot
+#ElevaciÃ³n 
+p1 <- ggplot(data = datos, aes(x = dem_m, fill = Class)) +
+  geom_density(alpha = 0.5) +
+  scale_fill_manual(values = c("gray50", "orangered2")) +
+  geom_rug(aes(color = Class), alpha = 0.5) +
+  scale_color_manual(values = c("gray50", "orangered2")) +
+  theme_bw()
+p2 <- ggplot(data = datos, aes(x = Class, y = dem_m, color = Class)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(alpha = 0.3, width = 0.15) +
+  scale_color_manual(values = c("gray50", "orangered2")) +
+  theme_bw()
+final_plot <- ggarrange(p1, p2, legend = "top")
+final_plot <- annotate_figure(final_plot, top = text_grob("Elevation", size = 15))
+final_plot
+#VCI 
+p1 <- ggplot(data = datos, aes(x = vci_tot, fill = Class)) +
+  geom_density(alpha = 0.5) +
+  scale_fill_manual(values = c("gray50", "orangered2")) +
+  geom_rug(aes(color = Class), alpha = 0.5) +
+  scale_color_manual(values = c("gray50", "orangered2")) +
+  theme_bw()
+p2 <- ggplot(data = datos, aes(x = Class, y = vci_tot, color = Class)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(alpha = 0.3, width = 0.15) +
+  scale_color_manual(values = c("gray50", "orangered2")) +
+  theme_bw()
+final_plot <- ggarrange(p1, p2, legend = "top")
+final_plot <- annotate_figure(final_plot, top = text_grob("VCI", size = 15))
+final_plot
+#PrecipitaciÃ³n media anual
+p1 <- ggplot(data = datos, aes(x = preci_ma, fill = Class)) +
+  geom_density(alpha = 0.5) +
+  scale_fill_manual(values = c("gray50", "orangered2")) +
+  geom_rug(aes(color = Class), alpha = 0.5) +
+  scale_color_manual(values = c("gray50", "orangered2")) +
+  theme_bw()
+p2 <- ggplot(data = datos, aes(x = Class, y = preci_ma, color = Class)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(alpha = 0.3, width = 0.15) +
+  scale_color_manual(values = c("gray50", "orangered2")) +
+  theme_bw()
+final_plot <- ggarrange(p1, p2, legend = "top")
+final_plot <- annotate_figure(final_plot, top = text_grob("Anual precipitation", size = 15))
+final_plot
+#PrecipitaciÃ³n de enero a junio 
+p1 <- ggplot(data = datos, aes(x = prec_mjj, fill = Class)) +
+  geom_density(alpha = 0.5) +
+  scale_fill_manual(values = c("gray50", "orangered2")) +
+  geom_rug(aes(color = Class), alpha = 0.5) +
+  scale_color_manual(values = c("gray50", "orangered2")) +
+  theme_bw()
+p2 <- ggplot(data = datos, aes(x = Class, y = prec_mjj, color = Class)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(alpha = 0.3, width = 0.15) +
+  scale_color_manual(values = c("gray50", "orangered2")) +
+  theme_bw()
+final_plot <- ggarrange(p1, p2, legend = "top")
+final_plot <- annotate_figure(final_plot, top = text_grob("Precip jj", size = 15))
+final_plot
+#PrecipitaciÃ³n media mensual
+p1 <- ggplot(data = datos, aes(x = preci_mm, fill = Class)) +
+  geom_density(alpha = 0.5) +
+  scale_fill_manual(values = c("gray50", "orangered2")) +
+  geom_rug(aes(color = Class), alpha = 0.5) +
+  scale_color_manual(values = c("gray50", "orangered2")) +
+  theme_bw()
+p2 <- ggplot(data = datos, aes(x = Class, y = preci_mm, color = Class)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(alpha = 0.3, width = 0.15) +
+  scale_color_manual(values = c("gray50", "orangered2")) +
+  theme_bw()
+final_plot <- ggarrange(p1, p2, legend = "top")
+final_plot <- annotate_figure(final_plot, top = text_grob("Precip media mensual", size = 15))
+final_plot
+#Temperatura media mensual
+p1 <- ggplot(data = datos, aes(x = temp_mm, fill = Class)) +
+  geom_density(alpha = 0.5) +
+  scale_fill_manual(values = c("gray50", "orangered2")) +
+  geom_rug(aes(color = Class), alpha = 0.5) +
+  scale_color_manual(values = c("gray50", "orangered2")) +
+  theme_bw()
+p2 <- ggplot(data = datos, aes(x = Class, y = temp_mm, color = Class)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(alpha = 0.3, width = 0.15) +
+  scale_color_manual(values = c("gray50", "orangered2")) +
+  theme_bw()
+final_plot <- ggarrange(p1, p2, legend = "top")
+final_plot <- annotate_figure(final_plot, top = text_grob("Mean Mensual Temperature", size = 15))
+final_plot
+#Temperatura de enero a junio 
+p1 <- ggplot(data = datos, aes(x = temp_mjj, fill = Class)) +
+  geom_density(alpha = 0.5) +
+  scale_fill_manual(values = c("gray50", "orangered2")) +
+  geom_rug(aes(color = Class), alpha = 0.5) +
+  scale_color_manual(values = c("gray50", "orangered2")) +
+  theme_bw()
+p2 <- ggplot(data = datos, aes(x = Class, y = temp_mjj, color = Class)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(alpha = 0.3, width = 0.15) +
+  scale_color_manual(values = c("gray50", "orangered2")) +
+  theme_bw()
+final_plot <- ggarrange(p1, p2, legend = "top")
+final_plot <- annotate_figure(final_plot, top = text_grob("Temp jj", size = 15))
+final_plot
+#NDVI tot
+p1 <- ggplot(data = datos, aes(x = ndvi_tot, fill = Class)) +
+  geom_density(alpha = 0.5) +
+  scale_fill_manual(values = c("gray50", "orangered2")) +
+  geom_rug(aes(color = Class), alpha = 0.5) +
+  scale_color_manual(values = c("gray50", "orangered2")) +
+  theme_bw()
+p2 <- ggplot(data = datos, aes(x = Class, y = ndvi_tot, color = Class)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(alpha = 0.3, width = 0.15) +
+  scale_color_manual(values = c("gray50", "orangered2")) +
+  theme_bw()
+final_plot <- ggarrange(p1, p2, legend = "top")
+final_plot <- annotate_figure(final_plot, top = text_grob("Mean mensual NDVI", size = 15))
+final_plot
+#NDVI de enero a junio 
+p1 <- ggplot(data = datos, aes(x = ndvi_mjj, fill = Class)) +
+  geom_density(alpha = 0.5) +
+  scale_fill_manual(values = c("gray50", "orangered2")) +
+  geom_rug(aes(color = Class), alpha = 0.5) +
+  scale_color_manual(values = c("gray50", "orangered2")) +
+  theme_bw()
+p2 <- ggplot(data = datos, aes(x = Class, y = ndvi_mjj, color = Class)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(alpha = 0.3, width = 0.15) +
+  scale_color_manual(values = c("gray50", "orangered2")) +
+  theme_bw()
+final_plot <- ggarrange(p1, p2, legend = "top")
+final_plot <- annotate_figure(final_plot, top = text_grob("NDVI jj", size = 15))
+final_plot
+##3.1.3 Test de hipÃ³tesis no paramÃ©trica
+sm.density.compare(datos$urban_m, datos$Class, model="equal", nboot= 500)
+sm.density.compare(datos$road_m, datos$Class, model = "equal", nboot= 500)
+sm.density.compare(datos$river_m, datos$Class, model = "equal", nboot= 500)
+sm.density.compare(datos$vci_tot, datos$Class, model = "equal", nboot= 500)
+sm.density.compare(datos$prec_mjj, datos$Class, model = "equal", nboot= 500)
+sm.density.compare(datos$temp_mm, datos$Class, model = "equal", nboot= 500)
+sm.density.compare(datos$temp_mjj, datos$Class, model = "equal", nboot= 500)
+sm.density.compare(datos$ndvi_tot, datos$Class, model = "equal", nboot= 500)
+sm.density.compare(datos$ndvi_mjj, datos$Class, model = "equal", nboot= 500)
+sm.density.compare(datos$dem_m, datos$Class, model = "equal", nboot= 500)
+sm.density.compare(datos$slope_perc, datos$Class, model = "equal", nboot= 500)
+sm.density.compare(datos$preci_ma, datos$Class, model = "equal", nboot= 500)
+sm.density.compare(datos$preci_mm, datos$Class, model = "equal", nboot= 500)
+
+#### 3.2 Test de hipÃ³tesis de variables cualitativas    ####
+#3.2.1 FunciÃ³n para el test de proporciones 
+test_proporcion <- function(df){
+  n_incendios <- sum(df$Class == 1) 
+  n_noincendios     <- sum(df$Class == 0)
+  n_total <- n_incendios + n_noincendios
+  test <- prop.test(x = n_incendios, n = n_total, p = 0.4)
+  prop_incendios <- n_incendios / n_total
+  return(data.frame(p_value = test$p.value, prop_incendios))
+}
+#3.2.2 FunciÃ³n para el test de proporciones Aspect
+#3.2.2.1 SelecciÃ³n de variables 
+datos_cualitativos <- datos %>% dplyr::select(Aspect_1,Class)
+#3.2.2.2 Test de proporciones
+analisis_prop <- datos_cualitativos %>%
+  group_by(Aspect_1) %>%
+  nest() %>%
+  arrange(Aspect_1) %>%
+  mutate(prop_test = map(.x = data, .f = test_proporcion)) %>%
+  unnest(prop_test) %>%
+  arrange(p_value) %>% 
+  dplyr::select(Aspect_1,p_value, prop_incendios)
+analisis_prop 
+#3.2.2.3 FunciÃ³n para grÃ¡fica
+plot_grupo <- function(grupo, df, threshold_line = 0.4){
+  p <- ggplot(data = df, aes(x = 1, y = ..count.., fill = Class)) +
+    geom_bar() +
+    scale_fill_manual(values = c("gray50", "orangered2")) +
+    # Se aÃ±ade una lÃ­nea horizontal en el nivel basal
+    geom_hline(yintercept = nrow(df) * threshold_line,
+               linetype = "dashed") +
+    labs(title = grupo) +
+    theme_bw() +
+    theme(legend.position = "bottom",
+          axis.text.x = element_blank(),
+          axis.title.x = element_blank(),
+          axis.ticks.x = element_blank())
+  return(p)
+}
+#3.2.2.4 RepresentaciÃ³n grÃ¡fica
+datos_graficos <- datos_cualitativos %>%
+  group_by(Aspect_1) %>%
+  nest() %>%  arrange(Aspect_1)
+plots <- map2(datos_graficos$Aspect_1, .y = datos_graficos$data,
+              .f = plot_grupo)
+ggarrange(plotlist = plots, common.legend = TRUE)
+#3.2.2 FunciÃ³n para el test de proporciones CUS
+#3.2.2.1 SelecciÃ³n de variables 
+datos_cualitativos <- datos %>%  dplyr:: select(CUS,Class)
+#3.2.2.2 Test de proporciones
+analisis_prop <- datos_cualitativos %>%
+  group_by(CUS) %>%
+  nest() %>%
+  arrange(CUS) %>%
+  mutate(prop_test = map(.x = data, .f = test_proporcion)) %>%
+  unnest(prop_test) %>%
+  arrange(p_value) %>% 
+  dplyr::select(CUS,p_value, prop_incendios)
+analisis_prop 
+#3.2.2.3 RepresentaciÃ³n grÃ¡fica
+datos_graficos <- datos_cualitativos %>%
+  group_by(CUS) %>%
+  nest() %>%  arrange(CUS)
+plots <- map2(datos_graficos$CUS, .y = datos_graficos$data,
+              .f = plot_grupo)
+ggarrange(plotlist = plots, common.legend = TRUE)
+
+#### 3.3 Indicadores de importancia con RF    ####
+# 3.3.1 SelecciÃ³n de variables 
+datos_rf <- datos %>% dplyr::select(-cus_n1,-river_m,-ZONA) %>%
+  na.omit()
+  names(datos_rf)
+names(datos_rf)[12]<- "aspe"
+names(datos_rf)[11]<- "slop_pe"
+names(datos_rf)[13]<- "lulc_l1"
+datos_rf <- map_if(.x = datos_rf, .p = is.character, .f = as.factor) %>%
+  as.data.frame()
+head(datos_rf)
+str(datos_rf)
+# 3.3.2 SelecciÃ³n de Ã¡rboles para el modelo
+# 3.3.2.1 FunciÃ³n para obtener los Ã¡rboles
+fun_ntree <- function(num){
+  res <- lapply(seq_len(num), function(i){
+    rf <- ranger(formula = as.formula(Class ~ .), data = datos_rf, num.trees = i,
+                 mtry = 3, importance = "impurity", write.forest = T, probability = T,
+                 min.node.size = floor(0.02*nrow(datos_rf)));
+    rf$prediction.error
+  })
+  return(unlist(res))
+}
+# 3.3.2.2 Obtener la funciÃ³n (se debe cambiar el nÃºmero de Ã¡rboles)
+res_ntree <- data.table(Arboles=seq(1,400), OOB=fun_ntree(400))
+ggplot(data = res_ntree, aes(x = Arboles, y = OOB)) + geom_line() + labs(title = "Evolucion del OOB vs Numero Arboles", x = "n? Ã¡rboles") +
+  theme_bw()
+#desde 200 ya se estabiliza
+# 3.3.3 Modelo RF e importancia 
+modelo_randforest <- randomForest(formula = Class ~ . ,
+                                  data = na.omit(datos_rf),
+                                  mtry = 5,
+                                  importance = TRUE, 
+                                  ntree = 200) 
+importancia <- as.data.frame(modelo_randforest$importance)
+importancia <- rownames_to_column(importancia,var = "variable")
+# 3.3.3.1 GrÃ¡fica de la importancia
+# Indice de PrecisiÃ³n
+p1 <- ggplot(data = importancia, aes(x = reorder(variable, MeanDecreaseAccuracy),
+                                     y = MeanDecreaseAccuracy,
+                                     fill = MeanDecreaseAccuracy)) +
+  labs(x = "Variable", title = element_blank(),y = "Mean Decrease Accuracy") +
+  geom_col() +  coord_flip() + 
+  theme(axis.text.x = element_text(angle = 0, hjust = 0.5,size = 10),
+        axis.text.y = element_text(size = 10),
+        axis.title.x = element_text(size = 10),
+        axis.title.y = element_text(size = 10) )+ theme_bw()+
+  theme(legend.position = "bottom", legend.title=element_blank())+
+  scale_fill_gradient(low="grey44", high="lightgrey")+
+  guides(fill = guide_colourbar(barwidth = 10))
+# Indice de Gini
+p2 <- ggplot(data = importancia, aes(x = reorder(variable, MeanDecreaseGini),
+                                      y = MeanDecreaseGini,
+                                      fill = MeanDecreaseGini)) +
+  labs(x = "", title = element_blank(), y="Mean Decrease Gini")+ ##x="Variable"
+  geom_col() +coord_flip() + theme_bw() +
+  theme(legend.position = "bottom", legend.title=element_blank())+
+  scale_fill_gradient(low="grey44", high="lightgrey")+
+  guides(fill = guide_colourbar(barwidth = 10))
+## GrÃ¡fica unida
+windows()
+ggarrange(p1, p2, ncol=2, nrow=1,legend = "bottom",
+          common.legend = F,align = "none", widths = c(1.03,1),labels = "auto",
+          font.label = list(size = 9, color = "black", family = NULL))
+ggarrange(p1, p2)
+# 3.3.4  CorrelaciÃ³n entre las variables continuas
+#3.3.4.1. SelecciÃ³n de variables
+datos_cor<-datos %>% dplyr::select(-!!c(1,4,11,14,15,18))
+names(datos_cor)[10]<-"slope"
+names(datos_cor)[11]<-"prec_ma"
+names(datos_cor)[12]<-"prec_mm"
+datos_cor<-datos_cor %>%  cor()
+#3.3.4.2. Matriz de correlaciÃ³n
+col <- colorRampPalette(c("#BB4444", "#EE9988", "#FFFFFF", "#77AADD", "#4477AA"))
+windows()
+ggcorrplot(datos_cor, method = c("square"),type = c("lower"), 
+           ggtheme = ggplot2::theme_classic(base_size = 11, base_line_size= 0.2), title = "",
+           show.legend = TRUE, legend.title = "Corr", show.diag = FALSE,
+           colors = c("#A90B09", "white", "#2889ce"), 
+           outline.color = "#F5F1F1", 
+           hc.order = TRUE, hc.method = "complete", lab = TRUE,
+           lab_col = "black", lab_size = 3, sig.level = 0.01,
+           insig = c("blank"), 
+           tl.cex = 11, tl.col = "black", tl.srt = 90,
+           digits = 2)+
+  theme(axis.title.x = element_text(angle=0,hjust=-0.17,vjust=16,size=11))+
+  labs(x = "Variables")
+####### 4. MODELO LOGÃSTICO                    #############
+#4.1 DivisiÃ³n de entrenamiento y test                   ####
+set.seed(123)
+train <- createDataPartition(y = datos$Class, p = 0.6, list = FALSE, times = 1)
+#Asignar los datos a variables de entrenamiento y test
+datos_train <- datos[train, ]
+datos_test  <- datos[-train, ]
+#Comprobar que tienen la misma distribuciÃ³n de los incendios totales
+prop.table(table(datos_train$Class)) %>% round(digits = 2)
+prop.table(table(datos_test$Class))  %>% round(digits = 2)
+names(datos_train)
+str(datos_train)
+#4.2 Preprocesamiento de datos                  ############
+#4.2.1 Crear una receta con los datos para el modelo
+objeto_recipe <- recipe(formula = Class~urban_m+slope_perc+
+                          prec_mjj+temp_mm+CUS
+                        +ndvi_mjj,data =  datos_train)
+#4.2.2 Se estandarizan todas las variables numÃ©ricas                     
+objeto_recipe <- objeto_recipe %>% step_center(all_numeric())%>%
+  step_scale(all_numeric()) %>% 
+  step_BoxCox(all_numeric())
+#4.2.3 Se estandarizan todas las variables numÃ©ricas
+trained_recipe <- prep(objeto_recipe, training = datos_train)
+trained_recipe
+summary(trained_recipe)
+str(trained_recipe)
+#4.2.4 Se aplican las transformaciones 
+datos_train_prep <- bake(trained_recipe, new_data = datos_train)
+datos_test_prep  <- bake(trained_recipe, new_data = datos_test)
+datos_total_prep <- bake(trained_recipe, new_data = datos)
+glimpse(datos_train_prep)
+glimpse(datos_test_prep)
+#4.3 RegresiÃ³n lÃ³gistica                        ############
+set.seed(342)
+#4.3.1 DefiniciÃ³n del modelo
+modelo_logistic <- train(Class ~ ., data = datos_train_prep,
+                         method = "glm",
+                         metric = "Accuracy",
+                         family = "binomial")
+modelo_logistic
+#4.3.2 InformaciÃ³n resultante del modelo 
+summary(modelo_logistic$finalModel)
+str(modelo_logistic)
+names(modelo_logistic$finalModel)
+vif(modelo_logistic$finalModel)
+#4.3.3 Test de Wald
+regTermTest(modelo_logistic$finalModel, "urban_m")
+regTermTest(modelo_logistic$finalModel, "ndvi_mjj")
+regTermTest(modelo_logistic$finalModel, "dem_m")
+regTermTest(modelo_logistic$finalModel, "CUSBOSQUE")
+regTermTest(modelo_logistic$finalModel, "`CUSTIERRA AGROPECUARIA`")
+regTermTest(modelo_logistic$finalModel, "preci_mm")
+
+#4.4 ValidaciÃ³n cruzada del modelo final       ############
+#4.4.1 CreaciÃ³n de carpetas
+folds <- createFolds(datos_total_prep$Class, k = 10)
+dim(datos)
+modlist <- list()
+precision<- vector()
+#4.4.2 Modelo logÃ­stico con validaciÃ³n cruzada
+cvRegresionLogistica <- for(i in 1:length(folds)){
+  training_fold <- datos_total_prep[-folds[[i]], ]
+  test_fold <- datos_total_prep[folds[[i]], ]
+  clasificador <- glm(Class ~ ., family = binomial, 
+                      data = training_fold)
+  modlist[[i]] <- clasificador
+  y_pred <- predict(clasificador, type = 'response', newdata = test_fold)
+  y_pred <- ifelse(y_pred > 0.5, 1, 0)
+  y_pred <- factor(y_pred, levels = c("0", "1"), labels = c("NoIncendio", "Incendio"))
+  cm <- table(test_fold$Class, y_pred)
+  precision[i] <- (cm[1,1] + cm[2,2]) / (cm[1,1] + cm[2,2] +cm[1,2] + cm[2,1])
+}
+summary(modlist)
+modlist[[2]]
+x <- summary(modlist[[1]])
+names(x)
+precisionRegresionLogistica <- mean(as.numeric(precision))
+
+modelo_logistict <- train(Class ~ ., data = datos_test_prep,
+                         method = "glm",
+                         metric = "Accuracy",
+                         family = "binomial")
+modelo_logistict
+#4.5 PredicciÃ³n del modelo       ############
+#4.5.1 PredicciÃ³n con datos de test
+predicciones_raw <- predict(modelo_logistic, newdata = datos_test_prep,
+                            type = "raw")
+predicciones_prob <- predict(modelo_logistic, newdata = datos_test_prep,
+                             type = "prob")
+summary(predicciones_raw) 
+#4.5.2 Matriz de confusiÃ³n de la predicciÃ³n 
+MC<- confusionMatrix(data = predicciones_raw, reference = datos_test_prep$Class,
+                positive = "1")
+MC
+# Error de test
+error_test <- mean(predicciones_raw != datos_test_prep$Class)
+paste("El error de test del modelo:", round(error_test*100, 2), "%")
+#4.5.3 CÃ¡lculo de ROC y AUC 
+# CÃ¡lculo de la curva
+curva_roc <- roc(response = datos_test_prep$Class, 
+                 predictor = predicciones_prob$`1`) 
+# GrÃ¡fico de la curva
+plot(curva_roc)
+# Ãrea bajo la curva AUC
+auc(curva_roc)
+# Intervalo de confianza de la curva
+ci.auc(curva_roc, conf.level = 0.95)
+#4.5.4 Modelo con todos los datos
+predicciones_prob2 <- predict(modelo_logistic, newdata = datos_total_prep,
+                             type = "prob")
+predicciones_final <- data.frame(datos,datos_total_prep,predicciones_prob2) 
+predicciones_final <- predicciones_final %>% dplyr::select(1:17,26,27)
+write.csv(predicciones_final,file = "predicciones_final.csv" )
+
+#### 4.6 Indicadores de importancia con RF    ####
+# 4.6.1 SelecciÃ³n de Ã¡rboles para el modelo
+# 4.6.1.1 FunciÃ³n para obtener los Ã¡rboles
+fun_ntree <- function(num){
+  res <- lapply(seq_len(num), function(i){
+    rf <- ranger(formula = as.formula(Class ~ .), data = datos_train_prep, num.trees = i,
+                 mtry = 3, importance = "impurity", write.forest = T, probability = T,
+                 min.node.size = floor(0.02*nrow(datos_train_prep)));
+    rf$prediction.error
+  })
+  return(unlist(res))
+}
+# 4.6.1.2 Obtener la funciÃ³n (se debe cambiar el nÃºmero de Ã¡rboles)
+res_ntree <- data.table(Arboles=seq(1,300), OOB=fun_ntree(300))
+ggplot(data = res_ntree, aes(x = Arboles, y = OOB)) + geom_line() + labs(title = "Evolucion del OOB vs Numero Arboles", x = "n? Ã¡rboles") +
+  theme_bw()
+#desde 150 ya se estabiliza
+# 4.6.2 Modelo RF e importancia 
+modelo_randforest <- randomForest(formula = Class ~ . ,
+                                  data = na.omit(datos_train_prep),
+                                  mtry = 5,
+                                  importance = TRUE, 
+                                  ntree = 300) 
+importancia <- as.data.frame(modelo_randforest$importance)
+importancia <- rownames_to_column(importancia,var = "variable")
+# 4.6.2.1 Gráfica de la importancia
+# Indice de Precisión
+p1 <- ggplot(data = importancia, aes(x = reorder(variable, MeanDecreaseAccuracy),
+                                     y = MeanDecreaseAccuracy,
+                                     fill = MeanDecreaseAccuracy)) +
+  labs(x = "Variable", title = element_blank(),y = "Mean Decrease Accuracy") +
+  geom_col() +  coord_flip() + 
+  theme(axis.text.x = element_text(angle = 0, hjust = 0.5,size = 10),
+        axis.text.y = element_text(size = 10),
+        axis.title.x = element_text(size = 10),
+        axis.title.y = element_text(size = 10) )+ theme_bw()+
+  theme(legend.position = "bottom", legend.title=element_blank())+
+  scale_fill_gradient(low="grey44", high="lightgrey")+
+  guides(fill = guide_colourbar(barwidth = 10))
+# Indice de Gini
+p2 <- ggplot(data = importancia, aes(x = reorder(variable, MeanDecreaseGini),
+                                     y = MeanDecreaseGini,
+                                     fill = MeanDecreaseGini)) +
+  labs(x = "", title = element_blank(), y="Mean Decrease Gini")+ ##x="Variable"
+  geom_col() +coord_flip() + theme_bw() +
+  theme(legend.position = "bottom", legend.title=element_blank())+
+  scale_fill_gradient(low="grey44", high="lightgrey")+
+  guides(fill = guide_colourbar(barwidth = 10))
+## GrÃ¡fica unida
+windows()
+ggarrange(p1, p2, ncol=2, nrow=1,legend = "bottom",
+          common.legend = F,align = "none", widths = c(1.03,1),labels = "auto",
+          font.label = list(size = 9, 
